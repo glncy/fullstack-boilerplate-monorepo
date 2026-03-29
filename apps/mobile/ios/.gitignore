@@ -1,0 +1,4 @@
+*
+!.gitignore
+!ci_scripts/
+!ci_scripts/ci_post_clone.sh

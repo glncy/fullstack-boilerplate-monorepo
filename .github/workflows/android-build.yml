@@ -14,8 +14,7 @@ on:
         type: string
       environment_prefix:
         description: Prefix for the GitHub Environment name
-        required: false
-        default: app-mobile
+        required: true
         type: string
       head_branch:
         description: Branch name associated with the build
@@ -38,8 +37,7 @@ on:
         type: string
       environment_prefix:
         description: Prefix for the GitHub Environment name
-        required: false
-        default: app-mobile
+        required: true
         type: string
       head_branch:
         description: Branch name associated with the build
@@ -53,7 +51,7 @@ on:
 jobs:
   build:
     name: ${{ format('🤖 [{0}] Android Build', inputs.app_label || inputs.app_path) }}
-    environment: ${{ format('{0}@{1}', inputs.environment_prefix || 'app-mobile', startsWith(inputs.head_branch, format('{0}@', inputs.environment_prefix || 'app-mobile')) && 'production' || 'main') }}
+    environment: ${{ format('{0}@{1}', inputs.environment_prefix, startsWith(inputs.head_branch, format('{0}@', inputs.environment_prefix)) && 'production' || 'main') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

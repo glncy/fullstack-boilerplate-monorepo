@@ -14,8 +14,7 @@ on:
         type: string
       environment_prefix:
         description: Prefix for the GitHub Environment name
-        required: false
-        default: app-mobile
+        required: true
         type: string
       head_branch:
         description: Branch name to release to
@@ -43,8 +42,7 @@ on:
         type: string
       environment_prefix:
         description: Prefix for the GitHub Environment name
-        required: false
-        default: app-mobile
+        required: true
         type: string
       head_branch:
         description: Branch name to release to
@@ -66,7 +64,7 @@ concurrency:
 jobs:
   release:
     name: ${{ format('🚀 [{0}] Release Update', inputs.app_label || inputs.app_path) }}
-    environment: ${{ format('{0}@{1}', inputs.environment_prefix || 'app-mobile', inputs.release_channel == 'production' && 'production' || 'main') }}
+    environment: ${{ format('{0}@{1}', inputs.environment_prefix, inputs.release_channel == 'production' && 'production' || 'main') }}
     runs-on: ubuntu-latest
     env:
       EXPO_UP_GITHUB_TOKEN: ${{ secrets.EXPO_UP_GITHUB_TOKEN }}

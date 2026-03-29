@@ -28,6 +28,7 @@ import { determineProductionVersionLock } from "./production-version-lock.js";
 import { resolveComparisonBase } from "./resolve-comparison-base.js";
 import { shouldRun } from "./should-run.js";
 import { syncChangedExpoVersions, syncExpoVersion } from "./sync-expo-version.js";
+import { triggerXcodeCloudBuildWithFallback } from "./xcode-cloud.js";
 
 type CommandContext = {
   args: string[];
@@ -110,6 +111,7 @@ bun run repo-scripts sync-expo-versions
 bun run repo-scripts latest-commit-changed --event <pull_request|push> --head-sha <sha> [--owner <owner>] [--repo <repo>] [--pull-number <number>] --include <glob>
 bun run repo-scripts latest-commit-deps-changed <appPath> --event <pull_request|push> --head-sha <sha> [--owner <owner>] [--repo <repo>] [--pull-number <number>] [--verbose]
 bun run repo-scripts latest-commit-fingerprint-changes --head-ref <ref> --android-fingerprint-path <path> --ios-fingerprint-path <path>
+bun run repo-scripts trigger-xcode-cloud-build --workflow-id <id> --ref-name <branch-or-tag>
 bun run repo-scripts resolve-comparison-base --event <pull_request|push> [--owner <owner>] [--repo <repo>] [--pull-number <number>]`);
   process.exit(1);
 }
@@ -496,6 +498,43 @@ async function runSyncExpoVersions(context: CommandContext) {
   }
 }
 
+async function runTriggerXcodeCloudBuild(context: CommandContext) {
+  const parsedArgs = parseArgs(context.args);
+  const workflowId = getOption(parsedArgs, "--workflow-id");
+  const refName = getOption(parsedArgs, "--ref-name");
+  const issuerId = process.env.APP_STORE_CONNECT_ISSUER_ID;
+  const keyId = process.env.APP_STORE_CONNECT_KEY_ID;
+  const privateKey = process.env.APP_STORE_CONNECT_PRIVATE_KEY;
+
+  if (!workflowId || !refName || !issuerId || !keyId || !privateKey) {
+    usage();
+  }
+
+  const result = await triggerXcodeCloudBuildWithFallback({
+    credentials: {
+      issuerId,
+      keyId,
+      privateKey,
+    },
+    refName,
+    workflowId,
+  });
+
+  console.log(`status=${result.status}`);
+  console.log(`backup_build_eligible=${result.backupBuildEligible}`);
+  console.log(`reason=${result.reason}`);
+
+  if (result.status === "started") {
+    console.log(`workflow_id=${result.workflowId}`);
+    console.log(`workflow_name=${result.workflowName}`);
+    console.log(`repository_id=${result.repositoryId}`);
+    console.log(`git_reference_id=${result.gitReferenceId}`);
+    console.log(`git_reference_kind=${result.gitReferenceKind}`);
+    console.log(`build_run_id=${result.buildRunId}`);
+    console.log(`build_run_api_url=${result.buildRunApiUrl}`);
+  }
+}
+
 async function main() {
   const repoRoot = resolve(process.cwd());
   const namespace = process.argv[2];
@@ -534,6 +573,11 @@ async function main() {
 
   if (namespace === "latest-commit-fingerprint-changes") {
     await runLatestCommitFingerprintChanges({ args: process.argv.slice(3), repoRoot });
+    return;
+  }
+
+  if (namespace === "trigger-xcode-cloud-build") {
+    await runTriggerXcodeCloudBuild({ args: process.argv.slice(3), repoRoot });
     return;
   }
 

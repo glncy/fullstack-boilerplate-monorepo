@@ -33,6 +33,17 @@ describe("ci and deploy workflows", () => {
     expect(mainWorkflow).not.toContain("uses: ./.github/workflows/run-command.yml");
   });
 
+  it("forwards inherited secrets to reusable ios build workflows", async () => {
+    for (const fileName of ["pr-workflow.yml", "main-branch.yml", "mobile-production-app.yml"]) {
+      const workflow = await readWorkflow(fileName);
+      const jobMatch = workflow.match(/(^  ios-build:\n[\s\S]*?)(?=^  [a-z0-9-]+:|\Z)/m);
+
+      expect(jobMatch).not.toBeNull();
+      expect(jobMatch?.[1]).toContain("uses: ./.github/workflows/ios-build.yml");
+      expect(jobMatch?.[1]).toContain("secrets: inherit");
+    }
+  });
+
   it("adds non-canceling concurrency to release workflows", async () => {
     for (const fileName of [
       "release-router.yml",
@@ -63,5 +74,36 @@ describe("ci and deploy workflows", () => {
     expect(releaseStepIndex).toBeGreaterThan(-1);
     expect(verifyStepIndex).toBeGreaterThan(releaseStepIndex);
     expect(workflow).toContain("bun run repo-scripts verify-mobile-release");
+  });
+
+  it("triggers Xcode Cloud instead of using the placeholder iOS build step", async () => {
+    const workflow = await readWorkflow("ios-build.yml");
+
+    expect(workflow).toContain("approve-ios-build:");
+    expect(workflow).toContain("environment: ${{ format('{0}@ios-build', inputs.environment_prefix) }}");
+    expect(workflow).toContain("approve-github-fallback:");
+    expect(workflow).toContain("environment: ${{ format('{0}@ios-build-gha', inputs.environment_prefix) }}");
+    expect(workflow).toContain("backup_build_eligible");
+    expect(workflow).toContain("- name: Validate Xcode Cloud configuration");
+    expect(workflow).toContain("- name: Trigger Xcode Cloud build");
+    expect(workflow).toContain("fallback-placeholder");
+    expect(workflow).not.toContain("-fallback@");
+    expect(workflow).toContain("bun run repo-scripts trigger-xcode-cloud-build");
+    expect(workflow).not.toContain("This is the placeholder iOS build step.");
+  });
+
+  it("documents the Xcode Cloud post-clone script in the iOS project", async () => {
+    const script = await readFile(
+      new URL("../../../apps/mobile/ios/ci_scripts/ci_post_clone.sh", import.meta.url),
+      "utf8",
+    );
+
+    expect(script).toContain("export CI");
+    expect(script).toContain("command -v node");
+    expect(script).toContain("node --no-warnings --eval");
+    expect(script).toContain("bun run build");
+    expect(script).toContain("expo-modules-autolinking react-native-config --json --platform ios");
+    expect(script).toContain("bun x expo prebuild -p ios --clean");
+    expect(script).not.toContain("pod install");
   });
 });

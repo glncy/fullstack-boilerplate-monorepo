@@ -2,6 +2,19 @@ name: "🍎 iOS Build"
 
 on:
   workflow_call:
+    outputs:
+      build_path:
+        description: Final build path selected for the iOS build.
+        value: ${{ jobs.finalize.outputs.build_path }}
+      backup_build_eligible:
+        description: Whether the backup GitHub build path was eligible.
+        value: ${{ jobs.finalize.outputs.backup_build_eligible }}
+      fallback_reason:
+        description: Reason the backup GitHub fallback path was selected or skipped.
+        value: ${{ jobs.finalize.outputs.fallback_reason }}
+      xcode_cloud_status:
+        description: Xcode Cloud trigger status.
+        value: ${{ jobs.finalize.outputs.xcode_cloud_status }}
     inputs:
       app_label:
         description: Human-friendly label for the app being built
@@ -14,8 +27,7 @@ on:
         type: string
       environment_prefix:
         description: Prefix for the GitHub Environment name
-        required: false
-        default: app-mobile
+        required: true
         type: string
       head_branch:
         description: Branch name associated with the build
@@ -38,8 +50,7 @@ on:
         type: string
       environment_prefix:
         description: Prefix for the GitHub Environment name
-        required: false
-        default: app-mobile
+        required: true
         type: string
       head_branch:
         description: Branch name associated with the build
@@ -51,10 +62,40 @@ on:
         type: string
 
 jobs:
-  build:
-    name: ${{ format('🍎 [{0}] iOS Build', inputs.app_label || inputs.app_path) }}
-    environment: ${{ format('{0}@{1}', inputs.environment_prefix || 'app-mobile', startsWith(inputs.head_branch, format('{0}@', inputs.environment_prefix || 'app-mobile')) && 'production' || 'main') }}
+  approve-ios-build:
+    name: ${{ format('✅ [{0}] Approve iOS Build', inputs.app_label || inputs.app_path) }}
+    environment: ${{ format('{0}@ios-build', inputs.environment_prefix) }}
     runs-on: ubuntu-latest
+    outputs:
+      approval_environment: ${{ steps.context.outputs.environment }}
+    steps:
+      - name: Record approval context
+        id: context
+        shell: bash
+        run: |
+          echo "environment=${{ inputs.environment_prefix }}@ios-build" >> "$GITHUB_OUTPUT"
+
+  trigger-xcode-cloud:
+    name: ${{ format('🍎 [{0}] Trigger Xcode Cloud Build', inputs.app_label || inputs.app_path) }}
+    needs: approve-ios-build
+    environment: ${{ format('{0}@{1}', inputs.environment_prefix, startsWith(inputs.head_branch, format('{0}@', inputs.environment_prefix)) && 'production' || 'main') }}
+    runs-on: ubuntu-latest
+    outputs:
+      build_run_api_url: ${{ steps.trigger_xcode_cloud.outputs.build_run_api_url }}
+      build_run_id: ${{ steps.trigger_xcode_cloud.outputs.build_run_id }}
+      backup_build_eligible: ${{ steps.trigger_xcode_cloud.outputs.backup_build_eligible }}
+      fallback_reason: ${{ steps.trigger_xcode_cloud.outputs.reason }}
+      git_reference_id: ${{ steps.trigger_xcode_cloud.outputs.git_reference_id }}
+      git_reference_kind: ${{ steps.trigger_xcode_cloud.outputs.git_reference_kind }}
+      repository_id: ${{ steps.trigger_xcode_cloud.outputs.repository_id }}
+      workflow_id: ${{ steps.trigger_xcode_cloud.outputs.workflow_id }}
+      workflow_name: ${{ steps.trigger_xcode_cloud.outputs.workflow_name }}
+      xcode_cloud_status: ${{ steps.trigger_xcode_cloud.outputs.status }}
+    env:
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+      XCODE_CLOUD_WORKFLOW_ID: ${{ vars.XCODE_CLOUD_WORKFLOW_ID }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -71,12 +112,152 @@ jobs:
           app_path: ${{ inputs.app_path }}
           env_file: ${{ vars.ENV_FILE }}
 
-      - name: Placeholder iOS build step
+      - name: Validate build metadata
         shell: bash
         run: |
-          echo "${{ inputs.app_path }}/fingerprints/ios.json needs a new entry."
-          echo "App: ${{ inputs.app_label || inputs.app_path }}"
-          echo "Path: ${{ inputs.app_path }}"
-          echo "Branch: ${{ inputs.head_branch || github.ref_name }}"
-          echo "Commit: ${{ inputs.head_sha || github.sha }}"
-          echo "This is the placeholder iOS build step."
+          APP_PATH="${{ inputs.app_path }}"
+
+          if [ ! -f "$APP_PATH/package.json" ]; then
+            echo "Missing package.json for iOS app at $APP_PATH" >&2
+            exit 1
+          fi
+
+          if [ ! -f "$APP_PATH/app.json" ] && [ ! -f "$APP_PATH/app.config.ts" ] && [ ! -f "$APP_PATH/app.config.js" ]; then
+            echo "Missing Expo app config for iOS app at $APP_PATH" >&2
+            exit 1
+          fi
+
+      - name: Validate Xcode Cloud configuration
+        shell: bash
+        run: |
+          if [ -z "$APP_STORE_CONNECT_ISSUER_ID" ]; then
+            echo "Missing required secret: APP_STORE_CONNECT_ISSUER_ID" >&2
+            exit 1
+          fi
+
+          if [ -z "$APP_STORE_CONNECT_KEY_ID" ]; then
+            echo "Missing required secret: APP_STORE_CONNECT_KEY_ID" >&2
+            exit 1
+          fi
+
+          if [ -z "$APP_STORE_CONNECT_PRIVATE_KEY" ]; then
+            echo "Missing required secret: APP_STORE_CONNECT_PRIVATE_KEY" >&2
+            exit 1
+          fi
+
+          if [ -z "$XCODE_CLOUD_WORKFLOW_ID" ]; then
+            echo "Missing required variable: XCODE_CLOUD_WORKFLOW_ID" >&2
+            exit 1
+          fi
+
+      - name: Trigger Xcode Cloud build
+        id: trigger_xcode_cloud
+        shell: bash
+        run: |
+          TRIGGER_OUTPUT="$(bun run repo-scripts trigger-xcode-cloud-build \
+            --workflow-id "$XCODE_CLOUD_WORKFLOW_ID" \
+            --ref-name "${{ inputs.head_branch || github.ref_name }}")"
+
+          echo "$TRIGGER_OUTPUT"
+
+          while IFS='=' read -r key value; do
+            case "$key" in
+              status|backup_build_eligible|reason|workflow_id|workflow_name|repository_id|git_reference_id|git_reference_kind|build_run_id|build_run_api_url)
+                echo "$key=$value" >> "$GITHUB_OUTPUT"
+                ;;
+            esac
+          done <<< "$TRIGGER_OUTPUT"
+
+      - name: Fail hard Xcode Cloud trigger errors
+        if: steps.trigger_xcode_cloud.outputs.status == 'hard_fail'
+        shell: bash
+        run: |
+          echo "${{ steps.trigger_xcode_cloud.outputs.reason }}" >&2
+          exit 1
+
+  approve-github-fallback:
+    name: ${{ format('✅ [{0}] Approve GitHub Backup Build', inputs.app_label || inputs.app_path) }}
+    needs: trigger-xcode-cloud
+    if: needs.trigger-xcode-cloud.outputs.backup_build_eligible == 'true'
+    environment: ${{ format('{0}@ios-build-gha', inputs.environment_prefix) }}
+    runs-on: ubuntu-latest
+    outputs:
+      approval_environment: ${{ steps.context.outputs.environment }}
+    steps:
+      - name: Record approval context
+        id: context
+        shell: bash
+        run: |
+          echo "environment=${{ inputs.environment_prefix }}@ios-build-gha" >> "$GITHUB_OUTPUT"
+
+  fallback-placeholder:
+    name: ${{ format('🛟 [{0}] Approved GitHub Fallback', inputs.app_label || inputs.app_path) }}
+    needs: [approve-github-fallback, trigger-xcode-cloud]
+    if: needs.trigger-xcode-cloud.outputs.backup_build_eligible == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      build_path: ${{ steps.report.outputs.build_path }}
+      fallback_approved: ${{ steps.report.outputs.fallback_approved }}
+    steps:
+      - name: Placeholder GitHub fallback build
+        id: report
+        shell: bash
+        run: |
+          echo "Fallback path approved for ${{ inputs.app_label || inputs.app_path }}."
+          echo "This placeholder job confirms the GitHub backup path was selected after Xcode Cloud could not start."
+          echo "build_path=fallback_placeholder" >> "$GITHUB_OUTPUT"
+          echo "fallback_approved=true" >> "$GITHUB_OUTPUT"
+
+  finalize:
+    name: ${{ format('📝 [{0}] Finalize iOS Build Result', inputs.app_label || inputs.app_path) }}
+    if: always()
+    needs: [approve-ios-build, trigger-xcode-cloud, approve-github-fallback, fallback-placeholder]
+    runs-on: ubuntu-latest
+    outputs:
+      build_path: ${{ steps.outputs.outputs.build_path }}
+      backup_build_eligible: ${{ steps.outputs.outputs.backup_build_eligible }}
+      fallback_reason: ${{ steps.outputs.outputs.fallback_reason }}
+      xcode_cloud_status: ${{ steps.outputs.outputs.xcode_cloud_status }}
+    steps:
+      - name: Compute final outputs
+        id: outputs
+        shell: bash
+        run: |
+          BUILD_PATH="failed"
+          if [ "${{ needs.trigger-xcode-cloud.outputs.xcode_cloud_status }}" = "started" ]; then
+            BUILD_PATH="xcode_cloud"
+          elif [ "${{ needs.fallback-placeholder.result }}" = "success" ]; then
+            BUILD_PATH="fallback_placeholder"
+          fi
+
+          echo "build_path=$BUILD_PATH" >> "$GITHUB_OUTPUT"
+          echo "backup_build_eligible=${{ needs.trigger-xcode-cloud.outputs.backup_build_eligible }}" >> "$GITHUB_OUTPUT"
+          echo "fallback_reason=${{ needs.trigger-xcode-cloud.outputs.fallback_reason }}" >> "$GITHUB_OUTPUT"
+          echo "xcode_cloud_status=${{ needs.trigger-xcode-cloud.outputs.xcode_cloud_status }}" >> "$GITHUB_OUTPUT"
+
+      - name: Write summary
+        shell: bash
+        run: |
+          {
+            echo "## iOS Build"
+            echo ""
+            echo "- App: ${{ inputs.app_label || inputs.app_path }}"
+            echo "- Path: ${{ inputs.app_path }}"
+            echo "- Ref: ${{ inputs.head_branch || github.ref_name }}"
+            echo "- Commit: ${{ inputs.head_sha || github.sha }}"
+            echo "- Approval environment: ${{ needs.approve-ios-build.outputs.approval_environment }}"
+            echo "- Approval result: ${{ needs.approve-ios-build.result }}"
+            echo "- Xcode Cloud status: ${{ needs.trigger-xcode-cloud.outputs.xcode_cloud_status }}"
+            echo "- Backup build eligible: ${{ needs.trigger-xcode-cloud.outputs.backup_build_eligible }}"
+            echo "- Fallback reason: ${{ needs.trigger-xcode-cloud.outputs.fallback_reason }}"
+            echo "- Backup approval environment: ${{ needs.approve-github-fallback.outputs.approval_environment }}"
+            echo "- Backup approval result: ${{ needs.approve-github-fallback.result }}"
+            echo "- Fallback approval result: ${{ needs.fallback-placeholder.result }}"
+            echo "- Final build path: ${{ steps.outputs.outputs.build_path }}"
+            echo "- Workflow ID: ${{ needs.trigger-xcode-cloud.outputs.workflow_id }}"
+            echo "- Workflow name: ${{ needs.trigger-xcode-cloud.outputs.workflow_name }}"
+            echo "- Git reference ID: ${{ needs.trigger-xcode-cloud.outputs.git_reference_id }}"
+            echo "- Git reference kind: ${{ needs.trigger-xcode-cloud.outputs.git_reference_kind }}"
+            echo "- Build run ID: ${{ needs.trigger-xcode-cloud.outputs.build_run_id }}"
+            echo "- Build run API URL: ${{ needs.trigger-xcode-cloud.outputs.build_run_api_url }}"
+          } >> "$GITHUB_STEP_SUMMARY"

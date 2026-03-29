@@ -160,6 +160,7 @@ jobs:
     with:
       app_label: ${{ needs.resolve-release.outputs.app-label }}
       app_path: ${{ needs.resolve-release.outputs.app-path }}
+      environment_prefix: app-mobile
       head_branch: ${{ needs.resolve-release.outputs.tag-name }}
       head_sha: ${{ needs.resolve-release.outputs.release-sha }}
 
@@ -171,8 +172,10 @@ jobs:
     with:
       app_label: ${{ needs.resolve-release.outputs.app-label }}
       app_path: ${{ needs.resolve-release.outputs.app-path }}
+      environment_prefix: app-mobile
       head_branch: ${{ needs.resolve-release.outputs.tag-name }}
       head_sha: ${{ needs.resolve-release.outputs.release-sha }}
+    secrets: inherit
 
   mobile-release-update:
     name: "🚀 Release Update"
@@ -182,6 +185,7 @@ jobs:
     with:
       app_label: ${{ needs.resolve-release.outputs.app-label }}
       app_path: ${{ needs.resolve-release.outputs.app-path }}
+      environment_prefix: app-mobile
       head_branch: ${{ needs.resolve-release.outputs.tag-name }}
       head_sha: ${{ needs.resolve-release.outputs.release-sha }}
       release_channel: production

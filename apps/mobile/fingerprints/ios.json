@@ -1,1 +1,11 @@
-{}
+{
+  "623acf578d935271fb57ea539ae2ffd76a8652a9": {
+    "version": "0.0.1",
+    "buildNumber": "1",
+    "profile": "preview",
+    "previewChannel": "codex/ios-xcode-cloud-fallback",
+    "ref": "codex/ios-xcode-cloud-fallback",
+    "channel": "main",
+    "createdAt": "2026-03-29T19:01:16.874Z"
+  }
+}

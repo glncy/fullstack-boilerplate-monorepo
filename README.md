@@ -77,8 +77,13 @@ Set these before deploying or enabling the reusable workflows in this repo.
 The updates worker also needs its project mapping in `apps/updates-worker/src/index.ts` updated to your real GitHub owner, OTA repo, and app slug.
 
 ### GitHub Actions
-- `ENV_FILE` GitHub Environment variable for mobile app builds/releases
+- `ENV_FILE` GitHub Environment variable on `app-mobile@main` and `app-mobile@production`
+- `XCODE_CLOUD_WORKFLOW_ID` GitHub Environment variable on `app-mobile@main` and `app-mobile@production`
 - `EXPO_UP_GITHUB_TOKEN` GitHub secret for `expo-up` release, history, and rollback workflows
+- `APP_STORE_CONNECT_ISSUER_ID` repository GitHub secret for App Store Connect API access
+- `APP_STORE_CONNECT_KEY_ID` repository GitHub secret for App Store Connect API access
+- `APP_STORE_CONNECT_PRIVATE_KEY` repository GitHub secret for App Store Connect API access
+- `app-mobile@ios-build` GitHub Environment with required reviewers for iOS build approval
 
 ## Upstream Sync
 

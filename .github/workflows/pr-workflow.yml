@@ -66,6 +66,7 @@ jobs:
     uses: ./.github/workflows/android-build.yml
     with:
       app_path: apps/mobile
+      environment_prefix: app-mobile
       head_branch: ${{ needs.determine-mobile-action.outputs.head-branch }}
       head_sha: ${{ needs.determine-mobile-action.outputs.head-sha }}
 
@@ -76,8 +77,10 @@ jobs:
     uses: ./.github/workflows/ios-build.yml
     with:
       app_path: apps/mobile
+      environment_prefix: app-mobile
       head_branch: ${{ needs.determine-mobile-action.outputs.head-branch }}
       head_sha: ${{ needs.determine-mobile-action.outputs.head-sha }}
+    secrets: inherit
 
   mobile-release-update:
     name: "🚀 Release Update"
@@ -86,6 +89,7 @@ jobs:
     uses: ./.github/workflows/mobile-release-update.yml
     with:
       app_path: apps/mobile
+      environment_prefix: app-mobile
       head_branch: ${{ needs.determine-mobile-action.outputs.head-branch }}
       head_sha: ${{ needs.determine-mobile-action.outputs.head-sha }}
     secrets: inherit
