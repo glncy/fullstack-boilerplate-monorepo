@@ -3,7 +3,7 @@
 
 declare module 'uniwind' {
     export interface UniwindConfig {
-        themes: readonly ['light', 'dark', 'hot-seat', 'hot-seat-night']
+        themes: readonly ['light', 'dark', 'custom-theme', 'custom-theme-dark']
     }
 }
 

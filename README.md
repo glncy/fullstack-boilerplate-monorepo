@@ -29,6 +29,32 @@ bun run check-types
 bun run build
 ```
 
+## Deployment Environment Variables
+
+Set these before deploying or enabling the reusable workflows in this repo.
+
+### Mobile
+- `apps/mobile/app.json` currently points OTA updates at `https://example.com/api/ota/fullstack-boilerplate/manifest`.
+- Replace that URL with your real updates worker domain and project slug before shipping OTA updates.
+- GitHub mobile workflows write an app `.env` file from the GitHub Environment variable `ENV_FILE`.
+
+### Web
+- `apps/web/.dev.vars` currently defines `NEXTJS_ENV=development` for local Cloudflare/OpenNext work.
+- Add any real production runtime values through your Cloudflare environment configuration before deployment.
+
+### Updates Worker
+- `GITHUB_AUTH_TOKEN`
+- `GITHUB_CLIENT_ID`
+- `GITHUB_CLIENT_SECRET`
+- `CODESIGNING_APP_PRIVATE_KEY` optional
+- `CODESIGNING_APP_KEY_ID` optional
+
+The updates worker also needs its project mapping in `apps/updates-worker/src/index.ts` updated to your real GitHub owner, OTA repo, and app slug.
+
+### GitHub Actions
+- `ENV_FILE` GitHub Environment variable for mobile app builds/releases
+- `EXPO_UP_GITHUB_TOKEN` GitHub secret for `expo-up` release, history, and rollback workflows
+
 ## Notes
 - This repository is a boilerplate, not a live product repository.
 - Review app identifiers, environment variables, release targets, and deployment settings before using it for a new project.

@@ -8,5 +8,5 @@ const config = getDefaultConfig(__dirname);
 module.exports = withUniwindConfig(config, {
     cssEntryFile: "./src/global.css",
     polyfills: { rem: 14 },
-    extraThemes: ['hot-seat', 'hot-seat-night'],
+    extraThemes: ['custom-theme', 'custom-theme-dark'],
 });

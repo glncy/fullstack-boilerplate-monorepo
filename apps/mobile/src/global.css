@@ -55,8 +55,8 @@
       --warning-foreground: oklch(0.2 0.05 240);
     }
 
-    @variant hot-seat {
-      /* Hot Seat - Light Mode */
+    @variant custom-theme {
+      /* Custom Theme - Light Mode */
       --background: oklch(0.98 0.01 260);
       --foreground: oklch(0.15 0.02 260);
       --surface: oklch(1 0 0);
@@ -112,8 +112,8 @@
       --field-shadow: oklch(0.1 0.02 260 / 0.05);
     }
 
-    @variant hot-seat-night {
-      /* Hot Seat - Dark Mode */
+    @variant custom-theme-dark {
+      /* Custom Theme - Dark Mode */
       --background: oklch(0.15 0.01 270); /* #0f0f13 */
       --foreground: oklch(1 0 0);
       --surface: oklch(0.2 0.02 270); /* #1c1c23 approx */
