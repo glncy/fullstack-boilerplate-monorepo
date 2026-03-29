@@ -1,1 +1,10 @@
-{}
+{
+  "b7ba4c7515ec9520adb3b7338f233ed2e47c8cc6": {
+    "version": "0.0.1",
+    "buildNumber": "2",
+    "profile": "internal",
+    "ref": "main",
+    "channel": "main",
+    "createdAt": "2026-03-29T19:51:13.535Z"
+  }
+}
