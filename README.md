@@ -163,6 +163,61 @@ Then open a PR into `glncy/fullstack-boilerplate-monorepo`.
 
 After the PR is merged, downstream projects can sync the new boilerplate change back through the normal upstream sync flow.
 
+### Exact Flow Used For This Repo
+
+When this project promoted the Xcode Cloud CI work back into the boilerplate, the flow was:
+
+1. Make sure the boilerplate remote exists and is up to date.
+
+   ```bash
+   git remote -v
+   git fetch upstream
+   ```
+
+2. Identify the project commit that contains the reusable change.
+
+   ```bash
+   git show --stat <project-commit-sha>
+   ```
+
+3. Create a fresh branch from the boilerplate's `main`.
+
+   ```bash
+   git checkout -b codex/upstream-xcode-cloud-ios-build-fallback upstream/main
+   ```
+
+4. Cherry-pick the reusable project commit onto that branch.
+   If the project commit is a merge commit, use `-m 1`.
+
+   ```bash
+   git cherry-pick -m 1 <project-merge-commit-sha>
+   ```
+
+5. Remove downstream-only files from the promoted diff before pushing.
+   In this repo, that meant dropping the generated fingerprint history files:
+
+   ```bash
+   git checkout upstream/main -- apps/mobile/fingerprints/android.json apps/mobile/fingerprints/ios.json
+   git commit -m "chore(ci): drop fingerprint history from boilerplate pr"
+   ```
+
+6. Push the branch to the boilerplate repo.
+
+   ```bash
+   git push upstream codex/upstream-xcode-cloud-ios-build-fallback
+   ```
+
+7. Open the PR against `glncy/fullstack-boilerplate-monorepo:main`.
+
+   ```bash
+   gh pr create \
+     --repo glncy/fullstack-boilerplate-monorepo \
+     --base main \
+     --head codex/upstream-xcode-cloud-ios-build-fallback
+   ```
+
+This keeps the project repo free to evolve independently while promoting only the reusable infrastructure change back into the boilerplate.
+
 ### If the project is a fork
 
 If `sample-project` is a fork of the boilerplate repo, you can open a PR from the fork into `glncy/fullstack-boilerplate-monorepo`, but do not open the PR from the fork's `main` branch.
