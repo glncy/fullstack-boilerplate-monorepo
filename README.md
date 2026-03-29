@@ -106,6 +106,105 @@ git merge upstream/main
 
 Use a branch and PR for each sync so upstream changes are reviewed before landing on `main`.
 
+## Contributing Back From A Project
+
+If a downstream project discovers an improvement that should live in the boilerplate, open a PR against the boilerplate repo from a branch created in this repo.
+
+Example: `sample-project` has a reusable workflow improvement that should be promoted back into the boilerplate.
+
+### Add the project as a remote
+
+```bash
+git remote add sample-project https://github.com/<your-org>/sample-project.git
+git fetch sample-project
+```
+
+### Create a boilerplate branch for the upstreamable change
+
+```bash
+git checkout -b feat/promote-workflow-improvement
+```
+
+### Bring the change into the boilerplate repo
+
+If the change is already isolated in a clean commit, cherry-pick it:
+
+```bash
+git cherry-pick <sample-project-commit-sha>
+```
+
+If only part of the project change belongs in the boilerplate, copy the relevant files or hunks instead:
+
+```bash
+git checkout sample-project/main -- .github/workflows/some-workflow.yml
+```
+
+### Generalize before opening the PR
+
+Before pushing, remove any downstream-only details such as:
+
+- project-specific app names
+- repo-specific secrets or variables
+- project URLs and endpoints
+- product-only branches, environments, or deploy targets
+
+### Open the boilerplate PR
+
+```bash
+git push -u origin feat/promote-workflow-improvement
+```
+
+Then open a PR into `glncy/fullstack-boilerplate-monorepo`.
+
+After the PR is merged, downstream projects can sync the new boilerplate change back through the normal upstream sync flow.
+
+### If the project is a fork
+
+If `sample-project` is a fork of the boilerplate repo, you can open a PR from the fork into `glncy/fullstack-boilerplate-monorepo`, but do not open the PR from the fork's `main` branch.
+
+Always create a dedicated branch for the reusable change first:
+
+```bash
+git checkout -b feat/promote-workflow-improvement
+```
+
+Recommended fork workflow:
+
+1. Start from the forked project repo.
+   Make sure your local checkout is up to date and that the reusable change is already identified.
+2. Create a clean contribution branch.
+
+   ```bash
+   git checkout -b feat/promote-workflow-improvement
+   ```
+
+3. Isolate only the reusable boilerplate change on that branch.
+   If needed, cherry-pick the relevant commit(s) or manually remove unrelated product-specific edits.
+4. Review the diff before pushing.
+   Confirm the branch does not include:
+   - product branding
+   - project-only environment variables
+   - project URLs or endpoints
+   - unrelated product UI or business logic
+   - downstream-only secrets, branches, or deploy targets
+5. Push the branch to the fork.
+
+   ```bash
+   git push -u origin feat/promote-workflow-improvement
+   ```
+
+6. Open a PR into the boilerplate repo.
+   Use:
+   - base repo: `glncy/fullstack-boilerplate-monorepo`
+   - base branch: `main`
+   - compare repo: your forked project repo
+   - compare branch: `feat/promote-workflow-improvement`
+
+7. Do not use `main` as the PR branch.
+   Keeping upstream contributions on a dedicated branch makes the PR reviewable and avoids mixing boilerplate improvements with the project's normal development history.
+
+If the fork has diverged heavily, prefer creating a fresh branch from the latest boilerplate `main`, then cherry-pick or rework only the reusable commits before opening the PR.
+
 ## Notes
 - This repository is a boilerplate, not a live product repository.
 - Review app identifiers, environment variables, release targets, and deployment settings before using it for a new project.
