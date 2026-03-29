@@ -32,5 +32,5 @@ bun install --frozen-lockfile
 bun run build
 
 cd "$MOBILE_ROOT"
-node --no-warnings --eval "require('expo/bin/autolinking')" expo-modules-autolinking react-native-config --json --platform ios > /tmp/expo-autolinking-ios.json
+node --no-warnings --eval "require('expo/bin/autolinking')" expo-modules-autolinking react-native-config --json --platform ios > /dev/null
 bun x expo prebuild -p ios --clean
