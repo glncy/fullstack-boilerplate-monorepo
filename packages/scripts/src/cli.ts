@@ -167,9 +167,14 @@ async function runFingerprint(command: string, context: CommandContext) {
     repoRoot: context.repoRoot,
   });
 
+  const matchedIos = fingerprints.history.ios[fingerprints.current.ios];
+  const matchedAndroid = fingerprints.history.android[fingerprints.current.android];
+
   console.log("Fingerprint check passed:");
   console.log(`- ios: ${fingerprints.current.ios}`);
   console.log(`- android: ${fingerprints.current.android}`);
+  console.log(`ios_ref=${matchedIos?.ref ?? ""}`);
+  console.log(`android_ref=${matchedAndroid?.ref ?? ""}`);
 }
 
 async function runDepsChange(context: CommandContext) {
@@ -274,8 +279,10 @@ async function runLatestCommitFingerprintChanges(context: CommandContext) {
 
   console.log(`android_changed=${result.androidChanged}`);
   console.log(`android_production_only=${result.androidProductionOnly}`);
+  console.log(`android_main_ref=${result.androidMainRef}`);
   console.log(`ios_changed=${result.iosChanged}`);
   console.log(`ios_production_only=${result.iosProductionOnly}`);
+  console.log(`ios_main_ref=${result.iosMainRef}`);
 }
 
 async function runDiscoverCloudflareApps(context: CommandContext) {

@@ -2,6 +2,7 @@ import { readFileAtRef } from "./git.js";
 
 type FingerprintEntry = {
   profile?: "internal" | "preview" | "production";
+  ref?: string;
 };
 
 type FingerprintHistory = Record<string, FingerprintEntry>;
@@ -9,8 +10,10 @@ type FingerprintHistory = Record<string, FingerprintEntry>;
 export type LatestCommitFingerprintChangesResult = {
   androidChanged: boolean;
   androidProductionOnly: boolean;
+  androidMainRef: boolean;
   iosChanged: boolean;
   iosProductionOnly: boolean;
+  iosMainRef: boolean;
 };
 
 function readFingerprintHistoryAtRef(
@@ -36,7 +39,7 @@ function summarizePlatformChange(
   repoRoot: string,
   headRef: string,
   path: string,
-): { changed: boolean; productionOnly: boolean } {
+): { changed: boolean; productionOnly: boolean; mainRef: boolean } {
   const previousHistory = readFingerprintHistoryAtRef(
     readFileAtRefImpl,
     repoRoot,
@@ -59,16 +62,17 @@ function summarizePlatformChange(
   );
 
   if (changedEntries.length === 0 && removedHashes.length === 0) {
-    return { changed: false, productionOnly: false };
+    return { changed: false, productionOnly: false, mainRef: false };
   }
 
   if (removedHashes.length > 0) {
-    return { changed: true, productionOnly: false };
+    return { changed: true, productionOnly: false, mainRef: false };
   }
 
   return {
     changed: true,
     productionOnly: changedEntries.every(([, entry]) => entry.profile === "production"),
+    mainRef: changedEntries.every(([, entry]) => entry.ref === "main"),
   };
 }
 
@@ -96,7 +100,9 @@ export async function latestCommitFingerprintChanges({
   return {
     androidChanged: android.changed,
     androidProductionOnly: android.productionOnly,
+    androidMainRef: android.mainRef,
     iosChanged: ios.changed,
     iosProductionOnly: ios.productionOnly,
+    iosMainRef: ios.mainRef,
   };
 }

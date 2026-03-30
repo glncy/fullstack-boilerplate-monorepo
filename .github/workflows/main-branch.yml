@@ -56,6 +56,8 @@ jobs:
     with:
       event_name: ${{ github.event_name }}
       app_path: apps/mobile
+      android_fingerprint_ref: ${{ needs.fingerprint-refresh.outputs.android-fingerprint-ref }}
+      ios_fingerprint_ref: ${{ needs.fingerprint-refresh.outputs.ios-fingerprint-ref }}
       head_branch: ${{ github.ref_name }}
       head_sha: ${{ github.sha }}
 

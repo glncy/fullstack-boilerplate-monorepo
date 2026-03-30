@@ -30,6 +30,16 @@ on:
         required: false
         default: ""
         type: string
+      android_fingerprint_ref:
+        description: The ref from the matched Android fingerprint history entry
+        required: false
+        default: ""
+        type: string
+      ios_fingerprint_ref:
+        description: The ref from the matched iOS fingerprint history entry
+        required: false
+        default: ""
+        type: string
       head_branch:
         description: Branch associated with the workflow run
         required: true
@@ -113,24 +123,47 @@ jobs:
           IOS_CHANGED="$(echo "$FINGERPRINT_CHANGE_OUTPUT" | awk -F= '/^ios_changed=/{print $2}' | tail -1)"
           IOS_PRODUCTION_ONLY="$(echo "$FINGERPRINT_CHANGE_OUTPUT" | awk -F= '/^ios_production_only=/{print $2}' | tail -1)"
 
-          if [ "$ANDROID_CHANGED" = "true" ] && [ "$ANDROID_PRODUCTION_ONLY" != "true" ]; then
-            RUN_ANDROID_BUILD="true"
-          else
-            RUN_ANDROID_BUILD="false"
-          fi
+          # When fingerprint refs are provided (from fingerprint refresh on main), use them
+          # to decide builds based on the actual matched history entry. This avoids false
+          # triggers from squash-merged PR fingerprints that have non-main refs.
+          # When not provided (PR workflows), fall back to commit-diff behavior.
+          ANDROID_FINGERPRINT_REF="${{ inputs.android_fingerprint_ref }}"
+          IOS_FINGERPRINT_REF="${{ inputs.ios_fingerprint_ref }}"
 
-          if [ "$IOS_CHANGED" = "true" ] && [ "$IOS_PRODUCTION_ONLY" != "true" ]; then
-            RUN_IOS_BUILD="true"
+          if [ -n "$ANDROID_FINGERPRINT_REF" ] || [ -n "$IOS_FINGERPRINT_REF" ]; then
+            # Main branch path: use fingerprint ref from matched history entry
+            if [ "$ANDROID_FINGERPRINT_REF" = "main" ] && [ "$ANDROID_PRODUCTION_ONLY" != "true" ]; then
+              RUN_ANDROID_BUILD="true"
+            else
+              RUN_ANDROID_BUILD="false"
+            fi
+
+            if [ "$IOS_FINGERPRINT_REF" = "main" ] && [ "$IOS_PRODUCTION_ONLY" != "true" ]; then
+              RUN_IOS_BUILD="true"
+            else
+              RUN_IOS_BUILD="false"
+            fi
           else
-            RUN_IOS_BUILD="false"
+            # PR path: use commit-diff behavior
+            if [ "$ANDROID_CHANGED" = "true" ] && [ "$ANDROID_PRODUCTION_ONLY" != "true" ]; then
+              RUN_ANDROID_BUILD="true"
+            else
+              RUN_ANDROID_BUILD="false"
+            fi
+
+            if [ "$IOS_CHANGED" = "true" ] && [ "$IOS_PRODUCTION_ONLY" != "true" ]; then
+              RUN_IOS_BUILD="true"
+            else
+              RUN_IOS_BUILD="false"
+            fi
           fi
 
           if [ "$RUN_ANDROID_BUILD" = "true" ] || [ "$RUN_IOS_BUILD" = "true" ]; then
             RUN_MOBILE_RELEASE="false"
-            REASON="Latest commit changed one or more non-production fingerprint history files."
+            REASON="Fingerprint entry matched for build (android_ref=$ANDROID_FINGERPRINT_REF, ios_ref=$IOS_FINGERPRINT_REF)."
           elif [ "$ANDROID_CHANGED" = "true" ] || [ "$IOS_CHANGED" = "true" ]; then
             RUN_MOBILE_RELEASE="false"
-            REASON="Latest commit only changed production fingerprint history files."
+            REASON="Fingerprint history changed but not eligible for builds (android_ref=$ANDROID_FINGERPRINT_REF, ios_ref=$IOS_FINGERPRINT_REF)."
           else
             RUN_MOBILE_RELEASE="$(bun run repo-scripts latest-commit-deps-changed "$APP_PATH" \
               --event "${{ inputs.event_name }}" \
@@ -162,8 +195,10 @@ jobs:
             echo "- iOS fingerprint: ${IOS_FINGERPRINT_PATH}"
             echo "- Android fingerprint changed: ${ANDROID_CHANGED}"
             echo "- Android production only: ${ANDROID_PRODUCTION_ONLY}"
+            echo "- Android fingerprint ref: ${ANDROID_FINGERPRINT_REF}"
             echo "- iOS fingerprint changed: ${IOS_CHANGED}"
             echo "- iOS production only: ${IOS_PRODUCTION_ONLY}"
+            echo "- iOS fingerprint ref: ${IOS_FINGERPRINT_REF}"
             echo "- Android build: ${RUN_ANDROID_BUILD}"
             echo "- iOS build: ${RUN_IOS_BUILD}"
             echo "- Release update: ${RUN_MOBILE_RELEASE}"
