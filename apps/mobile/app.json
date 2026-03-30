@@ -10,7 +10,11 @@
     "ios": {
       "icon": "./assets/expo.icon",
       "bundleIdentifier": "com.glncy.fullstack-boilerplate",
-      "buildNumber": "1"
+      "buildNumber": "1",
+      "appleTeamId": "U5H755ZAHL",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {

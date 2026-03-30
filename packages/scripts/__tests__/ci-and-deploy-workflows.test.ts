@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { parse } from "yaml";
 
 async function readWorkflow(fileName: string) {
   return readFile(new URL(`../../../.github/workflows/${fileName}`, import.meta.url), "utf8");
@@ -41,7 +42,16 @@ describe("ci and deploy workflows", () => {
       expect(jobMatch).not.toBeNull();
       expect(jobMatch?.[1]).toContain("uses: ./.github/workflows/ios-build.yml");
       expect(jobMatch?.[1]).toContain("secrets: inherit");
+      expect(jobMatch?.[1]).toContain("build_profile:");
     }
+  });
+
+  it("passes the production build profile to the iOS build workflow", async () => {
+    const workflow = await readWorkflow("mobile-production-app.yml");
+    const jobMatch = workflow.match(/(^  ios-build:\n[\s\S]*?)(?=^  [a-z0-9-]+:|\Z)/m);
+
+    expect(jobMatch).not.toBeNull();
+    expect(jobMatch?.[1]).toContain("build_profile: production");
   });
 
   it("adds non-canceling concurrency to release workflows", async () => {
@@ -76,23 +86,125 @@ describe("ci and deploy workflows", () => {
     expect(workflow).toContain("bun run repo-scripts verify-mobile-release");
   });
 
-  it("triggers Xcode Cloud instead of using the placeholder iOS build step", async () => {
+  it("routes iOS builds through GitHub Actions and Xcode Cloud with one-way fallback", async () => {
     const workflow = await readWorkflow("ios-build.yml");
+    const parsedWorkflow = parse(workflow) as {
+      jobs: Record<
+        string,
+        {
+          environment?: string;
+          "runs-on"?: string;
+          steps?: Array<{ name?: string; uses?: string }>;
+        }
+      >;
+    };
 
-    expect(workflow).toContain("approve-ios-build:");
-    expect(workflow).toContain("environment: ${{ format('{0}@ios-build', inputs.environment_prefix) }}");
-    expect(workflow).toContain("approve-github-fallback:");
-    expect(workflow).toContain("environment: ${{ format('{0}@ios-build-gha', inputs.environment_prefix) }}");
+    expect(workflow).toContain("resolve-build-strategy:");
+    expect(workflow).toContain("build_profile:");
+    expect(workflow).toContain("ios_primary_builder:");
+    expect(workflow).toContain("repository_visibility_override:");
+    expect(workflow).toContain('Accepted values: github_actions, xcode_cloud');
+    expect(workflow).toContain("approve-primary-xcode-build:");
+    expect(workflow).toContain("approve-fallback-xcode-build:");
+    expect(parsedWorkflow.jobs["approve-primary-xcode-build"]?.environment).toBe(
+      "${{ format('{0}@ios-build-xcode', inputs.environment_prefix) }}",
+    );
+    expect(parsedWorkflow.jobs["approve-fallback-xcode-build"]?.environment).toBe(
+      "${{ format('{0}@ios-build-xcode', inputs.environment_prefix) }}",
+    );
+    expect(workflow).toContain("approve-primary-github-actions-build:");
+    expect(workflow).toContain("approve-fallback-github-actions-build:");
+    expect(parsedWorkflow.jobs["approve-primary-github-actions-build"]?.environment).toBe(
+      "${{ format('{0}@ios-build-gha', inputs.environment_prefix) }}",
+    );
+    expect(parsedWorkflow.jobs["approve-fallback-github-actions-build"]?.environment).toBe(
+      "${{ format('{0}@ios-build-gha', inputs.environment_prefix) }}",
+    );
+    expect(workflow).toContain("primary_build_path");
+    expect(workflow).toContain("repo_visibility");
+    expect(workflow).toContain("effective_repo_visibility");
     expect(workflow).toContain("backup_build_eligible");
+    expect(workflow).toContain('if [ "$FALLBACK_USED" = "true" ]; then');
+    expect(parsedWorkflow.jobs["primary-github-actions-build"]?.["runs-on"]).toBe("macos-26");
+    expect(parsedWorkflow.jobs["primary-github-actions-build"]?.environment).toBe(
+      "${{ format('{0}@{1}', inputs.environment_prefix, startsWith(inputs.head_branch, format('{0}@', inputs.environment_prefix)) && 'production' || 'main') }}",
+    );
+    expect(
+      parsedWorkflow.jobs["primary-github-actions-build"]?.steps?.some(
+        (step) => step.name === "Build and upload iOS app on GitHub Actions" && step.uses === "./.github/actions/ios-build-gha",
+      ),
+    ).toBe(true);
+    expect(parsedWorkflow.jobs["fallback-github-actions-build"]?.environment).toBe(
+      "${{ format('{0}@{1}', inputs.environment_prefix, startsWith(inputs.head_branch, format('{0}@', inputs.environment_prefix)) && 'production' || 'main') }}",
+    );
+    expect(
+      parsedWorkflow.jobs["fallback-github-actions-build"]?.steps?.some(
+        (step) => step.name === "Build and upload iOS app on GitHub Actions" && step.uses === "./.github/actions/ios-build-gha",
+      ),
+    ).toBe(true);
+    expect(workflow).toContain("IOS_MATCH_GIT_URL");
+    expect(workflow).toContain("IOS_MATCH_GIT_BRANCH");
+    expect(workflow).toContain("MATCH_PASSWORD");
+    expect(workflow).toContain("MATCH_GIT_HTTP_CREDENTIAL");
+    expect(workflow).toContain("uses: ./.github/actions/setup-env");
     expect(workflow).toContain("- name: Validate Xcode Cloud configuration");
     expect(workflow).toContain("- name: Trigger Xcode Cloud build");
-    expect(workflow).toContain("fallback-placeholder");
+    expect(workflow).toContain("primary-github-actions-build");
+    expect(workflow).toContain("primary-or-fallback-xcode-cloud");
+    expect(workflow).toContain("fallback-github-actions-build");
+    expect(workflow).toContain("the workflow will not ask for another backup path in this run");
     expect(workflow).not.toContain("-fallback@");
     expect(workflow).toContain("bun run repo-scripts trigger-xcode-cloud-build");
-    expect(workflow).not.toContain("This is the placeholder iOS build step.");
+    expect(workflow).not.toContain("placeholder-only");
+    expect(workflow).not.toContain('PREP_SCRIPT="$APP_PATH/ios/ci_scripts/ci_post_clone.sh"');
   });
 
-  it("documents the Xcode Cloud post-clone script in the iOS project", async () => {
+  it("extracts the GitHub Actions iOS implementation into a composite action", async () => {
+    const action = await readFile(new URL("../../../.github/actions/ios-build-gha/action.yml", import.meta.url), "utf8");
+
+    expect(action).toContain("actions/setup-node@v4");
+    expect(action).toContain("uses: ./.github/actions/setup-env");
+    expect(action).toContain("uses: ./.github/actions/write-env-file");
+    expect(action).toContain("Cache CocoaPods");
+    expect(action).toContain("Build workspace packages");
+    expect(action).toContain("Verify Expo iOS autolinking");
+    expect(action).toContain("Prepare Expo config for build profile");
+    expect(action).toContain("prepare-expo-production-config");
+    expect(action).toContain("Generate iOS native project");
+    expect(action).toContain("ruby/setup-ruby@v1");
+    expect(action).toContain("Cache Fastlane gems");
+    expect(action).toContain("bundle exec fastlane ios ci_build");
+    expect(action).toContain("MATCH_GIT_URL");
+    expect(action).toContain("MATCH_PASSWORD");
+    expect(action).toContain("MATCH_GIT_HTTP_CREDENTIAL");
+    expect(action).toContain('MATCH_GIT_BASIC_AUTHORIZATION="$(printf \'%s\' "$MATCH_GIT_HTTP_CREDENTIAL" | base64)"');
+    expect(action).not.toContain("apple-actions/import-codesign-certs@v5");
+  });
+
+  it("stores the shared iOS fastlane lane under packages/scripts", async () => {
+    const fastfile = await readFile(new URL("../../../packages/scripts/fastlane/Fastfile", import.meta.url), "utf8");
+    const gemfile = await readFile(new URL("../../../packages/scripts/fastlane/Gemfile", import.meta.url), "utf8");
+    const matchfile = await readFile(new URL("../../../packages/scripts/fastlane/Matchfile", import.meta.url), "utf8");
+
+    expect(gemfile).toContain('gem "fastlane"');
+    expect(matchfile).toContain('storage_mode("git")');
+    expect(matchfile).toContain('type("appstore")');
+    expect(matchfile).toContain('git_branch(ENV["MATCH_GIT_BRANCH"])');
+    expect(fastfile).toContain("lane :ci_build");
+    expect(fastfile).toContain('ios_path = File.join(app_root, "ios")');
+    expect(fastfile).toContain('workspaces = Dir[File.join(ios_path, "*.xcworkspace")]');
+    expect(fastfile).toContain('scheme = File.basename(workspaces.first, ".xcworkspace")');
+    expect(fastfile).toContain('setup_ci if ENV["CI"] == "true"');
+    expect(fastfile).toContain("match(");
+    expect(fastfile).toContain("app_identifier: app_identifier");
+    expect(fastfile).toContain("build_app(");
+    expect(fastfile).toContain('export_method: "app-store"');
+    expect(fastfile).toContain('signingStyle: "manual"');
+    expect(fastfile).toContain("upload_to_testflight(");
+    expect(fastfile).not.toContain("appleTeamId");
+  });
+
+  it("documents the iOS CI prep script in the native project", async () => {
     const script = await readFile(
       new URL("../../../apps/mobile/ios/ci_scripts/ci_post_clone.sh", import.meta.url),
       "utf8",
@@ -104,6 +216,8 @@ describe("ci and deploy workflows", () => {
     expect(script).toContain("bun run build");
     expect(script).toContain("expo-modules-autolinking react-native-config --json --platform ios");
     expect(script).toContain("bun x expo prebuild -p ios --clean");
+    expect(script).toContain("BUILD_PROFILE");
+    expect(script).toContain("prepare-expo-production-config");
     expect(script).not.toContain("pod install");
   });
 });

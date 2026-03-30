@@ -83,7 +83,49 @@ The updates worker also needs its project mapping in `apps/updates-worker/src/in
 - `APP_STORE_CONNECT_ISSUER_ID` repository GitHub secret for App Store Connect API access
 - `APP_STORE_CONNECT_KEY_ID` repository GitHub secret for App Store Connect API access
 - `APP_STORE_CONNECT_PRIVATE_KEY` repository GitHub secret for App Store Connect API access
-- `app-mobile@ios-build` GitHub Environment with required reviewers for iOS build approval
+- `IOS_MATCH_GIT_URL` GitHub variable pointing at the private signing repo used by Fastlane `match`
+- `IOS_MATCH_GIT_BRANCH` GitHub variable for the signing branch used by Fastlane `match`
+- `MATCH_PASSWORD` repository GitHub secret containing the Fastlane `match` encryption/decryption password for the files stored in the signing repo
+- `MATCH_GIT_HTTP_CREDENTIAL` repository GitHub secret containing the plain `username:token` HTTPS credential used to clone the private signing repo; the workflow base64-encodes it at runtime before invoking `match`
+- `app-mobile@ios-build-xcode` GitHub Environment with required reviewers for Xcode Cloud iOS build approval
+- `app-mobile@ios-build-gha` GitHub Environment with required reviewers for GitHub Actions iOS build approval
+
+For the Fastlane `match` setup, keep this split:
+
+- secrets:
+  - `MATCH_PASSWORD`
+  - `MATCH_GIT_HTTP_CREDENTIAL`
+- variables:
+  - `IOS_MATCH_GIT_BRANCH`
+  - `IOS_MATCH_GIT_URL`
+
+To seed the private signing repo for iOS with Fastlane `match`, run:
+
+```bash
+cd packages/scripts/fastlane
+
+bundle install
+
+export MATCH_GIT_URL="https://github.com/glncy/clawdi-signing.git"
+export MATCH_GIT_BRANCH="ios"
+export MATCH_PASSWORD="<choose-a-strong-password>"
+
+bundle exec fastlane match appstore
+```
+
+If you already have an existing signing certificate and provisioning profile to import instead of creating or syncing one through `match`, run:
+
+```bash
+cd packages/scripts/fastlane
+
+bundle install
+
+export MATCH_GIT_URL="https://github.com/glncy/clawdi-signing.git"
+export MATCH_GIT_BRANCH="ios"
+export MATCH_PASSWORD="<use-the-same-password-you-will-store-in-github>"
+
+bundle exec fastlane match import
+```
 
 ## Upstream Sync
 

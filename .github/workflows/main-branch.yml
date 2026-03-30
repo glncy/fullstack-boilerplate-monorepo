@@ -77,9 +77,11 @@ jobs:
     uses: ./.github/workflows/ios-build.yml
     with:
       app_path: apps/mobile
+      build_profile: internal
       environment_prefix: app-mobile
       head_branch: ${{ needs.determine-mobile-action.outputs.head-branch }}
       head_sha: ${{ needs.determine-mobile-action.outputs.head-sha }}
+      ios_primary_builder: ${{ vars.IOS_PRIMARY_BUILDER }}
     secrets: inherit
 
   mobile-release-update:

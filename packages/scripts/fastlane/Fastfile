@@ -1,0 +1,103 @@
+require "tmpdir"
+
+default_platform(:ios)
+
+platform :ios do
+  desc "Archive and upload the Expo iOS app from GitHub Actions"
+  lane :ci_build do
+    app_path = ENV["APP_PATH"]
+    UI.user_error!("APP_PATH is required") if app_path.to_s.empty?
+
+    repo_root = File.expand_path("../../..", __dir__)
+    app_root = File.expand_path(app_path, repo_root)
+
+    ios_path = File.join(app_root, "ios")
+    workspaces = Dir[File.join(ios_path, "*.xcworkspace")]
+    xcodeproj = Dir[File.join(ios_path, "*.xcodeproj")].first
+    UI.user_error!("Expected exactly one Xcode workspace in #{ios_path}, found #{workspaces.length}") unless workspaces.length == 1
+    UI.user_error!("Xcode project not found at #{ios_path}") if xcodeproj.nil?
+
+    # Extract app_identifier from the main app target in project.pbxproj
+    # Reads the pbxproj once and finds PRODUCT_BUNDLE_IDENTIFIER within the Release configuration
+    # of the target matching the scheme name, falling back to the first match if not found.
+    pbxproj_path = File.join(xcodeproj, "project.pbxproj")
+    pbxproj_content = File.read(pbxproj_path)
+    app_identifier = pbxproj_content[/\/\* Release \*\/.*?PRODUCT_BUNDLE_IDENTIFIER\s*=\s*([^;]+);/m, 1]&.strip ||
+                     pbxproj_content[/PRODUCT_BUNDLE_IDENTIFIER\s*=\s*([^;]+);/, 1]&.strip
+    UI.user_error!("app_identifier not found in project.pbxproj") if app_identifier.to_s.empty?
+
+    scheme = File.basename(workspaces.first, ".xcworkspace")
+
+    # Capture environment variables for validation and reuse
+    key_id = ENV["APP_STORE_CONNECT_KEY_ID"]
+    issuer_id = ENV["APP_STORE_CONNECT_ISSUER_ID"]
+    private_key = ENV["APP_STORE_CONNECT_PRIVATE_KEY"]
+    match_git_url = ENV["MATCH_GIT_URL"]
+
+    UI.user_error!("APP_STORE_CONNECT_KEY_ID is required") if key_id.to_s.empty?
+    UI.user_error!("APP_STORE_CONNECT_ISSUER_ID is required") if issuer_id.to_s.empty?
+    UI.user_error!("APP_STORE_CONNECT_PRIVATE_KEY is required") if private_key.to_s.empty?
+    UI.user_error!("MATCH_GIT_URL is required") if match_git_url.to_s.empty?
+
+    api_key = app_store_connect_api_key(
+      key_id: key_id,
+      issuer_id: issuer_id,
+      key_content: private_key.gsub("\\n", "\n"),
+      is_key_content_base64: false,
+      in_house: false,
+    )
+
+    setup_ci if ENV["CI"] == "true"
+
+    match(
+      type: "appstore",
+      app_identifier: app_identifier,
+      readonly: true,
+      git_url: match_git_url,
+      git_branch: ENV["MATCH_GIT_BRANCH"],
+      shallow_clone: true,
+      clone_branch_directly: true,
+    )
+
+    team_id = File.read(pbxproj_path)[/DEVELOPMENT_TEAM\s*=\s*([^;]+);/, 1]&.strip
+    UI.user_error!("DEVELOPMENT_TEAM not found in project.pbxproj") if team_id.to_s.empty?
+
+    update_code_signing_settings(
+      path: xcodeproj,
+      use_automatic_signing: false,
+      team_id: team_id,
+      bundle_identifier: app_identifier,
+      profile_name: "match AppStore #{app_identifier}",
+      code_sign_identity: "Apple Distribution",
+    )
+
+    build_app(
+      workspace: workspaces.first,
+      scheme: scheme,
+      archive_path: File.join(Dir.tmpdir, "#{scheme}.xcarchive"),
+      export_method: "app-store",
+      export_options: {
+        signingStyle: "manual",
+        provisioningProfiles: {
+          app_identifier => "match AppStore #{app_identifier}",
+        },
+      },
+      output_directory: File.join(Dir.tmpdir, "exported-ios"),
+      output_name: "#{scheme}.ipa",
+    )
+
+    ipa_path = Actions.lane_context[SharedValues::IPA_OUTPUT_PATH]
+    UI.user_error!("Fastlane did not produce an IPA") if ipa_path.to_s.empty?
+
+    upload_to_testflight(
+      api_key: api_key,
+      ipa: ipa_path,
+      skip_waiting_for_build_processing: true,
+    )
+
+    github_output = ENV["GITHUB_OUTPUT"]
+    return if github_output.to_s.empty?
+
+    File.open(github_output, "a") { |f| f.puts("ipa_path=#{ipa_path}") }
+  end
+end

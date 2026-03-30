@@ -1,0 +1,158 @@
+name: "Build iOS App With GitHub Actions"
+description: "Builds, exports, and uploads the Expo iOS app on a macOS GitHub Actions runner"
+inputs:
+  app_path:
+    description: "Path to the Expo app"
+    required: true
+  env_file:
+    description: "Environment file contents to write for the app"
+    required: false
+    default: ""
+  build_profile:
+    description: "Expo build profile (e.g. internal, preview, production)"
+    required: true
+  app_store_connect_issuer_id:
+    description: "App Store Connect API issuer ID"
+    required: true
+  app_store_connect_key_id:
+    description: "App Store Connect API key ID"
+    required: true
+  app_store_connect_private_key:
+    description: "App Store Connect API private key contents"
+    required: true
+  match_git_url:
+    description: "Git URL for the Fastlane match signing repository"
+    required: true
+  match_git_branch:
+    description: "Git branch to use for Fastlane match"
+    required: true
+  match_password:
+    description: "Passphrase used by Fastlane match to decrypt signing assets"
+    required: true
+  match_git_http_credential:
+    description: "Plain username:token credential for the Fastlane match signing repository"
+    required: true
+outputs:
+  ipa_path:
+    description: "Path to the exported IPA"
+    value: ${{ steps.run_fastlane.outputs.ipa_path }}
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: "24"
+
+    - name: Setup workspace environment
+      uses: ./.github/actions/setup-env
+
+    - name: Write app env file
+      uses: ./.github/actions/write-env-file
+      with:
+        app_path: ${{ inputs.app_path }}
+        env_file: ${{ inputs.env_file }}
+
+    - name: Cache CocoaPods
+      uses: actions/cache@v5
+      with:
+        path: |
+          ~/.cocoapods
+          ~/Library/Caches/CocoaPods
+          ${{ inputs.app_path }}/ios/Pods
+        key: ${{ runner.os }}-cocoapods-${{ hashFiles('**/Podfile.lock', '**/Podfile', '**/bun.lockb', '**/bun.lock', format('{0}/app.json', inputs.app_path), format('{0}/app.eas.json', inputs.app_path)) }}
+        restore-keys: |
+          ${{ runner.os }}-cocoapods-
+
+    # NOTE: This validation is intentionally kept as a fast-fail safety net.
+    # Fastlane's ci_build lane performs the same checks, but this catches
+    # missing secrets before the slower build/prebuild steps run.
+    - name: Validate GitHub Actions iOS configuration
+      shell: bash
+      env:
+        APP_STORE_CONNECT_ISSUER_ID: ${{ inputs.app_store_connect_issuer_id }}
+        APP_STORE_CONNECT_KEY_ID: ${{ inputs.app_store_connect_key_id }}
+        APP_STORE_CONNECT_PRIVATE_KEY: ${{ inputs.app_store_connect_private_key }}
+        MATCH_GIT_URL: ${{ inputs.match_git_url }}
+        MATCH_PASSWORD: ${{ inputs.match_password }}
+        MATCH_GIT_HTTP_CREDENTIAL: ${{ inputs.match_git_http_credential }}
+      run: |
+        APP_PATH="${{ inputs.app_path }}"
+
+        if [ -z "$APP_STORE_CONNECT_ISSUER_ID" ] || [ -z "$APP_STORE_CONNECT_KEY_ID" ] || [ -z "$APP_STORE_CONNECT_PRIVATE_KEY" ]; then
+          echo "Missing required App Store Connect API secrets for GitHub Actions iOS build." >&2
+          exit 1
+        fi
+
+        if [ -z "$MATCH_GIT_URL" ] || [ -z "$MATCH_PASSWORD" ] || [ -z "$MATCH_GIT_HTTP_CREDENTIAL" ]; then
+          echo "Missing required Fastlane match configuration for GitHub Actions iOS build." >&2
+          exit 1
+        fi
+
+        if [ ! -f "$APP_PATH/app.json" ] && [ ! -f "$APP_PATH/app.config.js" ] && [ ! -f "$APP_PATH/app.config.ts" ]; then
+          echo "Missing Expo app config at $APP_PATH (expected app.json, app.config.js, or app.config.ts)." >&2
+          exit 1
+        fi
+
+    - name: Build workspace packages
+      shell: bash
+      run: |
+        export CI=1
+        bun run build
+
+    - name: Verify Expo iOS autolinking
+      shell: bash
+      run: |
+        export CI=1
+        node --no-warnings --eval "require('expo/bin/autolinking')" expo-modules-autolinking react-native-config --json --platform ios > /dev/null
+
+    - name: Prepare Expo config for build profile
+      if: inputs.build_profile == 'production'
+      shell: bash
+      run: |
+        bun run repo-scripts prepare-expo-production-config \
+          --path "${{ inputs.app_path }}"
+
+    - name: Generate iOS native project
+      shell: bash
+      working-directory: ${{ inputs.app_path }}
+      run: |
+        export CI=1
+        bun x expo prebuild -p ios --clean
+
+    - name: Setup Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: "3.3"
+
+    - name: Cache Fastlane gems
+      uses: actions/cache@v5
+      with:
+        path: packages/scripts/fastlane/vendor/bundle
+        key: ${{ runner.os }}-fastlane-${{ hashFiles('packages/scripts/fastlane/Gemfile') }}
+        restore-keys: |
+          ${{ runner.os }}-fastlane-
+
+    - name: Install Fastlane gems
+      shell: bash
+      run: |
+        cd packages/scripts/fastlane
+        bundle config set --local path vendor/bundle
+        bundle install --jobs 4 --retry 3
+
+    - name: Archive, export, and upload iOS app with Fastlane
+      id: run_fastlane
+      shell: bash
+      env:
+        APP_PATH: ${{ inputs.app_path }}
+        APP_STORE_CONNECT_ISSUER_ID: ${{ inputs.app_store_connect_issuer_id }}
+        APP_STORE_CONNECT_KEY_ID: ${{ inputs.app_store_connect_key_id }}
+        APP_STORE_CONNECT_PRIVATE_KEY: ${{ inputs.app_store_connect_private_key }}
+        MATCH_GIT_URL: ${{ inputs.match_git_url }}
+        MATCH_GIT_BRANCH: ${{ inputs.match_git_branch }}
+        MATCH_PASSWORD: ${{ inputs.match_password }}
+        MATCH_GIT_HTTP_CREDENTIAL: ${{ inputs.match_git_http_credential }}
+      run: |
+        export MATCH_GIT_BASIC_AUTHORIZATION="$(printf '%s' "$MATCH_GIT_HTTP_CREDENTIAL" | base64)"
+        cd packages/scripts/fastlane
+        bundle exec fastlane ios ci_build

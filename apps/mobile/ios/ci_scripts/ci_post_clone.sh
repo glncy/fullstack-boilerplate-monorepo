@@ -33,4 +33,13 @@ bun run build
 
 cd "$MOBILE_ROOT"
 node --no-warnings --eval "require('expo/bin/autolinking')" expo-modules-autolinking react-native-config --json --platform ios > /dev/null
+
+APP_PATH="${MOBILE_ROOT#"$REPO_ROOT"/}"
+
+if [ "${BUILD_PROFILE:-}" = "production" ]; then
+  cd "$REPO_ROOT"
+  bun run repo-scripts prepare-expo-production-config --path "$APP_PATH"
+  cd "$MOBILE_ROOT"
+fi
+
 bun x expo prebuild -p ios --clean

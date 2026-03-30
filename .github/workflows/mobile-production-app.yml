@@ -172,9 +172,11 @@ jobs:
     with:
       app_label: ${{ needs.resolve-release.outputs.app-label }}
       app_path: ${{ needs.resolve-release.outputs.app-path }}
+      build_profile: production
       environment_prefix: app-mobile
       head_branch: ${{ needs.resolve-release.outputs.tag-name }}
       head_sha: ${{ needs.resolve-release.outputs.release-sha }}
+      ios_primary_builder: ${{ vars.IOS_PRIMARY_BUILDER }}
     secrets: inherit
 
   mobile-release-update:
