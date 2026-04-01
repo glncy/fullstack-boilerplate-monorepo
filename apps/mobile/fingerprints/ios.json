@@ -1,1 +1,10 @@
-{}
+{
+  "02671d7f7afc6c3f8c9cfdcab5e51e8c65d07fc3": {
+    "version": "0.0.1",
+    "buildNumber": "2",
+    "profile": "internal",
+    "ref": "main",
+    "channel": "main",
+    "createdAt": "2026-04-01T08:46:10.208Z"
+  }
+}
