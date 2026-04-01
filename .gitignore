@@ -18,6 +18,7 @@ next-env.d.ts
 # misc
 .DS_Store
 *.pem
+!apps/mobile/certs/*.pem
 
 # debug
 npm-debug.log*
