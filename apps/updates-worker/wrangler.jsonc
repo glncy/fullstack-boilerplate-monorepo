@@ -4,6 +4,9 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-02-19",
   "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "GITHUB_CLIENT_ID": "put_client_id_here"
+  },
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,
