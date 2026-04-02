@@ -5,7 +5,7 @@
 @import 'heroui-native/styles';
 
 /* Path to the heroui-native lib inside node_modules relative to global.css */
-@source '../node_modules/heroui-native/lib';
+@source '../../../node_modules/heroui-native/lib';
 
 @layer theme {
   :root {
