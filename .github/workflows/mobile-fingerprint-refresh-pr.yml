@@ -42,6 +42,12 @@ on:
       fingerprints-match:
         description: Whether committed fingerprints already matched the current app state
         value: ${{ jobs.refresh.outputs.fingerprints-match }}
+      android-fingerprint-ref:
+        description: The ref field from the matched Android fingerprint history entry
+        value: ${{ jobs.refresh.outputs.android-fingerprint-ref }}
+      ios-fingerprint-ref:
+        description: The ref field from the matched iOS fingerprint history entry
+        value: ${{ jobs.refresh.outputs.ios-fingerprint-ref }}
       pr-url:
         description: Pull request URL when a refresh PR was created or updated
         value: ${{ jobs.refresh.outputs.pr-url }}
@@ -57,6 +63,8 @@ jobs:
     outputs:
       run-check: ${{ steps.determine.outputs.run_check }}
       fingerprints-match: ${{ steps.finalize.outputs.fingerprints_match }}
+      android-fingerprint-ref: ${{ steps.compare.outputs.android_ref }}
+      ios-fingerprint-ref: ${{ steps.compare.outputs.ios_ref }}
       pr-url: ${{ steps.pr.outputs.pr_url }}
     steps:
       - name: Checkout code
@@ -164,8 +172,16 @@ jobs:
             REF_ARG="--ref ${{ inputs.fingerprint_ref }}"
           fi
 
-          if bun run repo-scripts fingerprint compare --path "$APP_PATH" $PROFILE_ARG $REF_ARG; then
+          COMPARE_OUTPUT="$(bun run repo-scripts fingerprint compare --path "$APP_PATH" $PROFILE_ARG $REF_ARG 2>&1)" && COMPARE_EXIT=0 || COMPARE_EXIT=$?
+
+          echo "$COMPARE_OUTPUT"
+
+          if [ "$COMPARE_EXIT" -eq 0 ]; then
             echo "fingerprints_match=true" >> "$GITHUB_OUTPUT"
+            ANDROID_REF="$(echo "$COMPARE_OUTPUT" | awk -F= '/^android_ref=/{print $2}' | tail -1)"
+            IOS_REF="$(echo "$COMPARE_OUTPUT" | awk -F= '/^ios_ref=/{print $2}' | tail -1)"
+            echo "android_ref=$ANDROID_REF" >> "$GITHUB_OUTPUT"
+            echo "ios_ref=$IOS_REF" >> "$GITHUB_OUTPUT"
           else
             echo "fingerprints_match=false" >> "$GITHUB_OUTPUT"
           fi
