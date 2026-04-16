@@ -1,7 +1,3 @@
-# AGENTS.md
-
----
-
 # Main Development Rules & Guidelines
 
 You MUST follow these core development rules and workflows without exception, drawing from the integrated skills available.
