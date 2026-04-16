@@ -41,6 +41,11 @@
       "sourceType": "github",
       "computedHash": "e21044ae7496fc285f1df9ff3fb518a3a20bea6f5216c1f59f4987e12c769a0a"
     },
+    "dogfood": {
+      "source": "callstackincubator/agent-device",
+      "sourceType": "github",
+      "computedHash": "47e0ea18e07bbe14fc7547b3f79f9f4f1bd895e6d7cbb514055076d78c6ba9d0"
+    },
     "drizzle-orm": {
       "source": "bobmatnyc/claude-mpm-skills",
       "sourceType": "github",

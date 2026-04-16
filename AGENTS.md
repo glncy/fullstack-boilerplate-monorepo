@@ -138,6 +138,7 @@ No major feature should be implemented without following this workflow:
 | `uniwind` | Tailwind 4 utility styling for React Native |
 | `mobile-ui-tester` | Visual testing & auditing of React Native apps |
 | `agent-device` | Automate device interactions — tap, type, scroll, screenshot on iOS/Android |
+| `dogfood` | Systematically QA/exploratory-test a mobile app via agent-device, producing a bug report with screenshots |
 | `expo-api-routes` | Expo API routes patterns |
 | `expo-cicd-workflows` | CI/CD pipelines for Expo apps |
 | `expo-deployment` | Expo deployment strategies |
