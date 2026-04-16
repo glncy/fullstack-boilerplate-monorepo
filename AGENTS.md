@@ -11,6 +11,7 @@ You MUST follow these core development rules and workflows without exception, dr
 
 ## 1. Skill-First Development
 - **Activate Skills:** ALWAYS check for and activate relevant skills before starting any task. Skills provide expert procedural guidance that overrides general defaults.
+- **Before every action:** Scan the `# Available Skills` table in this file to check if a skill applies — do NOT rely on memory. If no matching skill is found, use `find-skills` to discover one before proceeding.
 - **Skill Discovery:** Use `find-skills` if a user requests functionality that might exist as an installable skill.
 - **Skill Maintenance:**
   - **Installing from registry:** `npx skills add <package> --agent claude-code -y`, then run `sync-custom-skills` to symlink into any other agent directories.
@@ -23,9 +24,10 @@ You MUST follow these core development rules and workflows without exception, dr
 - **Product Ownership:** Activate the `product-owner` skill for brainstorming, feature prioritization, requirement definition, and any time a product or scope decision needs to be made.
 
 ## 3. Planning & Exploration
-- **Think Before You Code:** Use the `brainstorming` skill (and `product-owner` where appropriate) prior to any creative work, feature creation, or behavior modification. Deeply explore the user's intent, constraints, and design possibilities before implementation.
-- **Write a Plan:** Use `writing-plans` to produce a structured implementation plan before touching any code.
-- **Execute the Plan:** Use `executing-plans` when carrying out a written plan — follow review checkpoints and do not skip steps.
+- **Brainstorm:** You MUST invoke the `brainstorming` skill before any creative work, feature creation, or spec writing — no exceptions.
+- **Product decisions:** You MUST invoke `product-owner` for feature prioritization, requirement definition, or scope decisions.
+- **Write a Plan:** You MUST invoke `writing-plans` before touching any code — do not write plans ad-hoc.
+- **Execute the Plan:** You MUST invoke `executing-plans` when carrying out a written plan — do not skip steps.
 
 ## 4. Test-Driven Development (TDD)
 - **Test First:** Use the `test-driven-development` skill when implementing ANY new feature or bugfix.
