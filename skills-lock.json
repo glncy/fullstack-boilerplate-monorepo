@@ -11,6 +11,11 @@
       "sourceType": "github",
       "computedHash": "409d466e43888f62987ceaf5c8be34aa76a49328528ebe290bab866f6d07e958"
     },
+    "agent-device": {
+      "source": "callstackincubator/agent-device",
+      "sourceType": "github",
+      "computedHash": "052ac7a0a9f316c93dc9aea5852b75129d54b7279ae32cb09e6c976968de2c7f"
+    },
     "ai-sdk": {
       "source": "vercel/ai",
       "sourceType": "github",
