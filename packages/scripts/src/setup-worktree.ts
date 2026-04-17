@@ -1,6 +1,6 @@
 import { Glob } from "bun";
-import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, readFileSync, readdirSync, symlinkSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, lstatSync, symlinkSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 
 import { loadProjectConfig } from "./project-config.js";
@@ -79,16 +79,6 @@ function resolveWorktreePath(
   return match?.path ?? null;
 }
 
-function getWorkspaces(repoRoot: string): string[] {
-  try {
-    const raw = readFileSync(join(repoRoot, "package.json"), "utf8");
-    const pkg = JSON.parse(raw) as { workspaces?: string[] };
-    return pkg.workspaces ?? [];
-  } catch {
-    return ["apps/*", "packages/*"];
-  }
-}
-
 function resolveGlobPatterns(mainRoot: string, patterns: string[]): string[] {
   const results: string[] = [];
   for (const pattern of patterns) {
@@ -146,6 +136,15 @@ export async function setupWorktree({
     throw new Error("Target resolves to the main repo — nothing to link.");
   }
 
+  // Install dependencies in the worktree
+  const install = spawnSync("bun", ["install"], {
+    cwd: worktreePath,
+    stdio: "inherit",
+  });
+  if (install.status !== 0) {
+    throw new Error("bun install failed in worktree.");
+  }
+
   const linked: string[] = [];
   const skipped: string[] = [];
   const missing: string[] = [];
@@ -155,23 +154,6 @@ export async function setupWorktree({
     if (result === "linked") linked.push(relPath);
     if (result === "skipped") skipped.push(relPath);
     if (result === "missing" && verbose) missing.push(relPath);
-  }
-
-  // node_modules — root + workspace packages
-  link("node_modules");
-
-  for (const pattern of getWorkspaces(mainRoot)) {
-    if (pattern.includes("*")) {
-      const parentDir = pattern.replace(/\/\*.*$/, "");
-      const fullParent = join(mainRoot, parentDir);
-      if (!existsSync(fullParent)) continue;
-      for (const entry of readdirSync(fullParent, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue;
-        link(`${parentDir}/${entry.name}/node_modules`);
-      }
-    } else {
-      link(`${pattern}/node_modules`);
-    }
   }
 
   // Extra symlinks from scripts.config.ts
