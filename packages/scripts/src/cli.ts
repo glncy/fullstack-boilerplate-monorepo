@@ -114,7 +114,7 @@ bun run repo-scripts latest-commit-deps-changed <appPath> --event <pull_request|
 bun run repo-scripts latest-commit-fingerprint-changes --head-ref <ref> --android-fingerprint-path <path> --ios-fingerprint-path <path>
 bun run repo-scripts trigger-xcode-cloud-build --workflow-id <id> --ref-name <branch-or-tag>
 bun run repo-scripts resolve-comparison-base --event <pull_request|push> [--owner <owner>] [--repo <repo>] [--pull-number <number>]
-bun run repo-scripts setup-worktree <worktree-name-or-path> [--verbose]`);
+bun run repo-scripts setup-worktree [worktree-name-or-path] [--verbose]`);
   process.exit(1);
 }
 
@@ -509,13 +509,9 @@ async function runSyncExpoVersions(context: CommandContext) {
 
 function runSetupWorktree(context: CommandContext) {
   const parsedArgs = parseArgs(context.args);
-  const target = parsedArgs.positionals[0];
-  if (!target) {
-    usage();
-  }
-
+  const target = parsedArgs.positionals[0]; // optional — defaults to cwd
   const verbose = hasOption(parsedArgs, "--verbose");
-  const result = setupWorktree({ repoRoot: context.repoRoot, target, verbose });
+  const result = setupWorktree({ cwd: context.repoRoot, target, verbose });
 
   console.log(`Worktree: ${result.worktreePath}`);
   for (const path of result.linked) {

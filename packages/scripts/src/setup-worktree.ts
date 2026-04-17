@@ -1,15 +1,15 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, lstatSync, readFileSync, readdirSync, symlinkSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 
 type WorktreeEntry = {
   path: string;
   branch?: string; // undefined for detached HEAD worktrees
 };
 
-function listWorktrees(repoRoot: string): WorktreeEntry[] {
+function listWorktrees(cwd: string): WorktreeEntry[] {
   const output = execFileSync("git", ["worktree", "list", "--porcelain"], {
-    cwd: repoRoot,
+    cwd,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
   });
@@ -35,12 +35,35 @@ function listWorktrees(repoRoot: string): WorktreeEntry[] {
   return worktrees;
 }
 
-function resolveWorktreePath(repoRoot: string, target: string): string | null {
-  if (existsSync(target)) {
-    return target;
+// First entry in git worktree list is always the main checkout
+function getMainRepoRoot(cwd: string): string {
+  const worktrees = listWorktrees(cwd);
+  const main = worktrees[0];
+  if (!main) throw new Error("Could not determine main repo root from git worktree list.");
+  return main.path;
+}
+
+function resolveWorktreePath(
+  mainRoot: string,
+  cwd: string,
+  target: string | undefined,
+): string | null {
+  // No arg — use cwd if it's a worktree (not the main repo)
+  if (!target) {
+    const resolvedCwd = resolve(cwd);
+    if (resolvedCwd === mainRoot) {
+      throw new Error(
+        "Run this from inside a worktree, or pass a worktree name: bun run setup-worktree <name>",
+      );
+    }
+    return resolvedCwd;
   }
 
-  const worktrees = listWorktrees(repoRoot);
+  if (existsSync(target)) {
+    return resolve(target);
+  }
+
+  const worktrees = listWorktrees(mainRoot);
   const match = worktrees.find(
     (wt) =>
       wt.path === target ||
@@ -80,8 +103,8 @@ function linkNodeModules(src: string, dst: string): LinkResult {
 }
 
 export type SetupWorktreeOptions = {
-  repoRoot: string;
-  target: string;
+  cwd: string;
+  target?: string;
   verbose?: boolean;
 };
 
@@ -93,18 +116,20 @@ export type SetupWorktreeResult = {
 };
 
 export function setupWorktree({
-  repoRoot,
+  cwd,
   target,
   verbose = false,
 }: SetupWorktreeOptions): SetupWorktreeResult {
-  const worktreePath = resolveWorktreePath(repoRoot, target);
+  const mainRoot = getMainRepoRoot(cwd);
+  const worktreePath = resolveWorktreePath(mainRoot, cwd, target);
+
   if (!worktreePath) {
     throw new Error(
       `Could not find worktree for '${target}'. Run 'git worktree list' to see available worktrees.`,
     );
   }
 
-  if (worktreePath === repoRoot) {
+  if (worktreePath === mainRoot) {
     throw new Error("Target resolves to the main repo — nothing to link.");
   }
 
@@ -113,20 +138,18 @@ export function setupWorktree({
   const missing: string[] = [];
 
   function link(relPath: string) {
-    const result = linkNodeModules(join(repoRoot, relPath), join(worktreePath, relPath));
+    const result = linkNodeModules(join(mainRoot, relPath), join(worktreePath, relPath));
     if (result === "linked") linked.push(relPath);
     if (result === "skipped") skipped.push(relPath);
-    if (result === "missing") {
-      if (verbose) missing.push(relPath);
-    }
+    if (result === "missing" && verbose) missing.push(relPath);
   }
 
   link("node_modules");
 
-  for (const pattern of getWorkspaces(repoRoot)) {
+  for (const pattern of getWorkspaces(mainRoot)) {
     if (pattern.includes("*")) {
       const parentDir = pattern.replace(/\/\*.*$/, "");
-      const fullParent = join(repoRoot, parentDir);
+      const fullParent = join(mainRoot, parentDir);
       if (!existsSync(fullParent)) continue;
       for (const entry of readdirSync(fullParent, { withFileTypes: true })) {
         if (!entry.isDirectory()) continue;
