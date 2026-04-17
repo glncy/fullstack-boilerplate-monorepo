@@ -27,6 +27,7 @@ import { latestCommitFingerprintChanges } from "./latest-commit-fingerprint-chan
 import { determineProductionVersionLock } from "./production-version-lock.js";
 import { resolveComparisonBase } from "./resolve-comparison-base.js";
 import { shouldRun } from "./should-run.js";
+import { setupWorktree } from "./setup-worktree.js";
 import { syncChangedExpoVersions, syncExpoVersion } from "./sync-expo-version.js";
 import { triggerXcodeCloudBuildWithFallback } from "./xcode-cloud.js";
 
@@ -112,7 +113,8 @@ bun run repo-scripts latest-commit-changed --event <pull_request|push> --head-sh
 bun run repo-scripts latest-commit-deps-changed <appPath> --event <pull_request|push> --head-sha <sha> [--owner <owner>] [--repo <repo>] [--pull-number <number>] [--verbose]
 bun run repo-scripts latest-commit-fingerprint-changes --head-ref <ref> --android-fingerprint-path <path> --ios-fingerprint-path <path>
 bun run repo-scripts trigger-xcode-cloud-build --workflow-id <id> --ref-name <branch-or-tag>
-bun run repo-scripts resolve-comparison-base --event <pull_request|push> [--owner <owner>] [--repo <repo>] [--pull-number <number>]`);
+bun run repo-scripts resolve-comparison-base --event <pull_request|push> [--owner <owner>] [--repo <repo>] [--pull-number <number>]
+bun run repo-scripts setup-worktree <worktree-name-or-path> [--verbose]`);
   process.exit(1);
 }
 
@@ -505,6 +507,31 @@ async function runSyncExpoVersions(context: CommandContext) {
   }
 }
 
+function runSetupWorktree(context: CommandContext) {
+  const parsedArgs = parseArgs(context.args);
+  const target = parsedArgs.positionals[0];
+  if (!target) {
+    usage();
+  }
+
+  const verbose = hasOption(parsedArgs, "--verbose");
+  const result = setupWorktree({ repoRoot: context.repoRoot, target, verbose });
+
+  console.log(`Worktree: ${result.worktreePath}`);
+  for (const path of result.linked) {
+    console.log(`  linked:  ${path}`);
+  }
+  for (const path of result.skipped) {
+    console.log(`  skipped: ${path} (already exists)`);
+  }
+  if (verbose) {
+    for (const path of result.missing) {
+      console.log(`  missing: ${path} (no node_modules in main repo)`);
+    }
+  }
+  console.log(`\nDone — ${result.linked.length} linked, ${result.skipped.length} skipped.`);
+}
+
 async function runTriggerXcodeCloudBuild(context: CommandContext) {
   const parsedArgs = parseArgs(context.args);
   const workflowId = getOption(parsedArgs, "--workflow-id");
@@ -640,6 +667,11 @@ async function main() {
 
   if (namespace === "sync-expo-versions") {
     await runSyncExpoVersions({ args: process.argv.slice(3), repoRoot });
+    return;
+  }
+
+  if (namespace === "setup-worktree") {
+    runSetupWorktree({ args: process.argv.slice(3), repoRoot });
     return;
   }
 

@@ -11,7 +11,8 @@
     "changeset": "bunx changeset",
     "changeset:version": "bunx changeset version && bun run repo-scripts sync-expo-versions",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "preflight": "echo \"Preflight checks placeholder\" && exit 0"
+    "preflight": "echo \"Preflight checks placeholder\" && exit 0",
+    "setup-worktree": "bun run repo-scripts setup-worktree"
   },
   "devDependencies": {
     "@changesets/cli": "^2.30.0",
