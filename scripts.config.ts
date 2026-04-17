@@ -2,7 +2,7 @@ import type { ProjectConfig } from "./packages/scripts/src/project-config.ts";
 
 const config: ProjectConfig = {
   "setup-worktree": {
-    symlinks: ["*/**/codesigning-keys"],
+    symlinks: [],
   },
   "deps-change": {
     "apps/mobile": {
