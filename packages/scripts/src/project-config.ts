@@ -18,6 +18,9 @@ type ShouldRunRule = {
 export type ProjectConfig = {
   "deps-change"?: Partial<Record<AppConfigPath, DepsChangeRule>>;
   "should-run"?: Record<string, ShouldRunRule>;
+  "setup-worktree"?: {
+    symlinks?: string[];
+  };
 };
 
 const SCRIPTS_CONFIG_FILE = "scripts.config.ts";

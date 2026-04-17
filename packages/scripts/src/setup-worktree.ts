@@ -1,6 +1,9 @@
+import { Glob } from "bun";
 import { execFileSync } from "node:child_process";
 import { existsSync, lstatSync, readFileSync, readdirSync, symlinkSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
+
+import { loadProjectConfig } from "./project-config.js";
 
 type WorktreeEntry = {
   path: string;
@@ -48,7 +51,6 @@ function resolveWorktreePath(
   cwd: string,
   target: string | undefined,
 ): string | null {
-  // No arg — use cwd if it's a worktree (not the main repo)
   if (!target) {
     const resolvedCwd = resolve(cwd);
     if (resolvedCwd === mainRoot) {
@@ -87,9 +89,20 @@ function getWorkspaces(repoRoot: string): string[] {
   }
 }
 
+function resolveGlobPatterns(mainRoot: string, patterns: string[]): string[] {
+  const results: string[] = [];
+  for (const pattern of patterns) {
+    const glob = new Glob(pattern);
+    for (const match of glob.scanSync({ cwd: mainRoot, onlyFiles: false })) {
+      results.push(match);
+    }
+  }
+  return results;
+}
+
 type LinkResult = "linked" | "skipped" | "missing";
 
-function linkNodeModules(src: string, dst: string): LinkResult {
+function linkPath(src: string, dst: string): LinkResult {
   if (!existsSync(src)) return "missing";
   // lstatSync (not existsSync) so broken symlinks at dst are detected as
   // "already present" and left in place rather than double-linked.
@@ -115,11 +128,11 @@ export type SetupWorktreeResult = {
   missing: string[];
 };
 
-export function setupWorktree({
+export async function setupWorktree({
   cwd,
   target,
   verbose = false,
-}: SetupWorktreeOptions): SetupWorktreeResult {
+}: SetupWorktreeOptions): Promise<SetupWorktreeResult> {
   const mainRoot = getMainRepoRoot(cwd);
   const worktreePath = resolveWorktreePath(mainRoot, cwd, target);
 
@@ -138,12 +151,13 @@ export function setupWorktree({
   const missing: string[] = [];
 
   function link(relPath: string) {
-    const result = linkNodeModules(join(mainRoot, relPath), join(worktreePath, relPath));
+    const result = linkPath(join(mainRoot, relPath), join(worktreePath, relPath));
     if (result === "linked") linked.push(relPath);
     if (result === "skipped") skipped.push(relPath);
     if (result === "missing" && verbose) missing.push(relPath);
   }
 
+  // node_modules — root + workspace packages
   link("node_modules");
 
   for (const pattern of getWorkspaces(mainRoot)) {
@@ -158,6 +172,17 @@ export function setupWorktree({
     } else {
       link(`${pattern}/node_modules`);
     }
+  }
+
+  // Extra symlinks from scripts.config.ts
+  try {
+    const config = await loadProjectConfig(mainRoot);
+    const patterns = config["setup-worktree"]?.symlinks ?? [];
+    for (const relPath of resolveGlobPatterns(mainRoot, patterns)) {
+      link(relPath);
+    }
+  } catch {
+    // scripts.config.ts missing or unreadable — skip extra symlinks
   }
 
   return { worktreePath, linked, skipped, missing };

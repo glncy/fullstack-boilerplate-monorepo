@@ -507,11 +507,11 @@ async function runSyncExpoVersions(context: CommandContext) {
   }
 }
 
-function runSetupWorktree(context: CommandContext) {
+async function runSetupWorktree(context: CommandContext) {
   const parsedArgs = parseArgs(context.args);
   const target = parsedArgs.positionals[0]; // optional — defaults to cwd
   const verbose = hasOption(parsedArgs, "--verbose");
-  const result = setupWorktree({ cwd: context.repoRoot, target, verbose });
+  const result = await setupWorktree({ cwd: context.repoRoot, target, verbose });
 
   console.log(`Worktree: ${result.worktreePath}`);
   for (const path of result.linked) {
@@ -667,7 +667,7 @@ async function main() {
   }
 
   if (namespace === "setup-worktree") {
-    runSetupWorktree({ args: process.argv.slice(3), repoRoot });
+    await runSetupWorktree({ args: process.argv.slice(3), repoRoot });
     return;
   }
 
